@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
+    <title>謎解きラリー メタモンを探せ！</title>
+    <style>
+        :root { --main: #6e8efb; --secondary: #a777e3; --bg: #f4f7f9; --white: #ffffff; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: sans-serif; background: var(--bg); margin: 0; padding: 0; text-align: center; overflow: hidden; position: fixed; width: 100%; height: 100%; }
+        #app { width: 100%; height: 100%; background: var(--white); position: relative; overflow: hidden; }
+        .screen { display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0; flex-direction: column; }
+        .active { display: flex; }
+
+        /* メイン画面 */
+        #screen-main { background: #e0f2fe; padding-top: 10px; }
+        #custom-box-img { position: absolute; bottom: 15px; left: 15px; width: 90px; height: 90px; object-fit: contain; z-index: 100; transition: transform 0.1s; display: none; }
+        #deco-right-img { position: absolute; bottom: 15px; right: 15px; width: 90px; height: 90px; object-fit: contain; z-index: 90; pointer-events: none; display: none; }
+        .can-click:active { transform: scale(1.1); }
+        
+        #list-container { padding: 0 15px; margin-top: 10px; z-index: 10; overflow-y: auto; flex: 1; -webkit-overflow-scrolling: touch; }
+        
+        /* リストのボタン */
+        .course-btn { width: 100%; min-height: 70px; padding: 12px 15px; margin: 8px 0; border: none; border-radius: 12px; background: white; box-shadow: 0 3px 6px rgba(0,0,0,0.08); display: flex; flex-direction: column; justify-content: center; align-items: flex-start; position: relative; text-align: left; }
+        .btn-label { font-weight: bold; font-size: 16px; color: #333; }
+        .btn-place { font-size: 12px; color: #64748b; margin-top: 2px; }
+        
+        .cleared { background: #d1fae5 !important; }
+        .cleared .btn-label { color: #065f46; }
+        .cleared::after { content: "✔"; position: absolute; right: 15px; top: 50%; transform: translateY(-50%); font-size: 20px; color: #10b981; }
+
+        /* クイズ画面 */
+        #screen-quiz { padding: 15px; background: white; text-align: left; overflow-y: auto; }
+        .q-visual-img, .explanation-img { width: 100%; max-height: 280px; object-fit: contain; margin-bottom: 15px; border-radius: 8px; display: block; }
+        .q-place-badge { font-size: 13px; color: #64748b; margin-top: 4px; display: block; }
+
+        input[type="text"] { width: 100%; height: 55px; border: 2px solid #ddd; border-radius: 12px; margin-bottom: 12px; font-size: 18px; text-align: center; }
+        .btn-main { background: linear-gradient(135deg, var(--main), var(--secondary)); color: white; border: none; height: 55px; border-radius: 12px; font-weight: bold; cursor: pointer; width: 100%; font-size: 17px; }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <!-- タイトル画面 -->
+    <div id="screen-title" class="screen active" style="background: linear-gradient(135deg, var(--main), var(--secondary)); color: white; justify-content: center; align-items: center; padding: 20px;">
+        <h1 style="font-size: 26px;">謎解きラリー メタモンを探せ！</h1>
+        <button class="btn-main" style="max-width:200px; background:white; color:var(--main);" onclick="changeScreen('screen-main')">探しにいく</button>
+    </div>
+
+    <!-- メイン画面（一覧） -->
+    <div id="screen-main" class="screen">
+        <img id="custom-box-img" src="" onclick="tryOpenBox()">
+        <img id="deco-right-img" src="">
+        <div style="padding: 15px 15px 5px; text-align: center;">
+            <h2 style="margin: 0; font-size: 20px;">問題選択</h2>
+            <p style="font-size: 13px; color: #64748b; margin: 5px 0;">ポスターを見つけて謎に挑戦しよう！</p>
+        </div>
+        <div id="list-container">
+            <div id="list"></div>
+            <div id="big-mystery-area"></div>
+        </div>
+    </div>
+
+    <!-- クイズ画面 -->
+    <div id="screen-quiz" class="screen">
+        <button onclick="changeScreen('screen-main')" style="background:none; border:none; color:var(--main); font-weight:bold; padding: 15px 0; text-align: left;">◀ 一覧にもどる</button>
+        <div id="q-header" style="background: #f8fafc; padding: 12px; border-radius: 12px; margin-bottom: 15px;">
+            <h3 id="q-title" style="margin: 0;"></h3>
+            <span id="q-place" class="q-place-badge"></span>
+        </div>
+        <div id="q-content">
+            <div id="q-visual-container"></div>
+            <div id="input-area">
+                <input type="text" id="answer-input" placeholder="答えを入力">
+                <button class="btn-main" onclick="checkAnswer()">解答する</button>
+                <div id="result-msg" style="margin-top:10px; text-align:center; font-weight:bold;"></div>
+            </div>
+            <div id="hint-area" style="margin-top:15px;">
+                <div id="hint-display" style="background:#fef9c3; padding:15px; border-radius:10px; margin-bottom:10px; border-left:5px solid #facc15; display:none;"></div>
+                <div id="hint-buttons" style="display:flex; gap:8px;"></div>
+            </div>
+            <div id="clear-note" style="display:none; background:#ecfdf5; padding:20px; border-radius:15px; border:2px solid #10b981;"></div>
+        </div>
+    </div>
+
+    <!-- 演出画面 -->
+    <div id="screen-ditto" class="screen" style="justify-content:center; align-items:center; background:#fdf2f8;">
+        <div style="font-size: 60px;">✨🟣✨</div>
+        <h2 style="color:#be185d;">メタモンをみつけた！</h2>
+        <img id="final-img" style="width:80%; max-height:250px; object-fit:contain; border-radius:15px; margin:15px 0;">
+        <p id="final-note-display" style="padding:0 20px; line-height:1.6;"></p>
+        <button class="btn-main" style="max-width:200px;" onclick="location.reload()">タイトルへ</button>
+    </div>
+</div>
+
+<script>
+    const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTBdawjEJXW0M8rkAMR0urV97CO7Vt4tLHCrKeNAOgrLwWefPEZ5n_jeAb4CtOS-xGuwu62wG_akPaj/pub?output=csv";
+    const imageFolder = ""; 
+
+    let puzzles = [];
+    let clearedIds = JSON.parse(localStorage.getItem('ivy_cleared') || '[]');
+    let currentPz = null;
+    let boxData = null;
+    let bigPuzzleId = null;
+
+    function getImgPath(fileName) {
+        if (!fileName || fileName.trim().length < 2) return "";
+        if (fileName.startsWith('http')) return fileName;
+        return imageFolder + fileName.trim();
+    }
+
+    async function load() {
+        try {
+            const res = await fetch(csvUrl + "&t=" + Date.now());
+            const text = await res.text();
+            const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
+            const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+            const getCol = (name) => headers.indexOf(name);
+
+            let allRows = [];
+            for (let i = 1; i < lines.length; i++) {
+                const c = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(s => s.replace(/"/g, '').trim());
+                if (c.length < 5) continue;
+                
+                allRows.push({
+                    id: c[getCol('id')] || "",
+                    type: c[getCol('type')] || "",
+                    place: c[getCol('place')] || "", // 場所を取得
+                    hints: (c[getCol('hints')] || "").split('/'),
+                    ans: (c[getCol('ans')] || "").split('/'),
+                    note: c[getCol('note')] || "",
+                    deco: c[getCol('deco')] || "",
+                    q_img: c[getCol('q_img')] || "",
+                    clear_img: c[getCol('clear_img')] || "",
+                    deco_right: c[getCol('deco_right')] || ""
+                });
+            }
+            
+            if (allRows.length > 0) {
+                boxData = allRows[allRows.length - 1]; 
+                puzzles = allRows.slice(0, -1); 
+                bigPuzzleId = puzzles[puzzles.length - 1]?.id;
+            }
+            renderMenu();
+        } catch (e) { console.error("Load Error:", e); }
+    }
+
+    function renderMenu() {
+        const list = document.getElementById('list');
+        const bigArea = document.getElementById('big-mystery-area');
+        const boxImg = document.getElementById('custom-box-img');
+        const rightDeco = document.getElementById('deco-right-img');
+        
+        list.innerHTML = ""; bigArea.innerHTML = "";
+        const smalls = puzzles.slice(0, -1);
+        const big = puzzles[puzzles.length - 1];
+
+        smalls.forEach(p => {
+            const btn = document.createElement('button');
+            btn.className = `course-btn ${clearedIds.includes(p.id) ? 'cleared' : ''}`;
+            btn.innerHTML = `<span class="btn-label">${p.type}</span>` + 
+                            (p.place ? `<span class="btn-place">場所：${p.place}</span>` : "");
+            btn.onclick = () => showQuiz(p);
+            list.appendChild(btn);
+        });
+
+        const allOk = smalls.length > 0 && smalls.every(p => clearedIds.includes(p.id));
+        if (allOk && big) {
+            const bBtn = document.createElement('button');
+            bBtn.className = `course-btn ${clearedIds.includes(big.id) ? 'cleared' : ''}`;
+            bBtn.style.border = "2px solid #a777e3";
+            bBtn.innerHTML = `<span class="btn-label">✨ ${big.type}</span>` + 
+                             (big.place ? `<span class="btn-place">場所：${big.place}</span>` : "");
+            bBtn.onclick = () => showQuiz(big);
+            bigArea.appendChild(bBtn);
+        }
+
+        if (boxData) {
+            const bPath = getImgPath(boxData.deco);
+            if (bPath) {
+                boxImg.src = bPath;
+                boxImg.style.display = 'block';
+                boxImg.className = (allOk && clearedIds.includes(big?.id)) ? 'can-click' : '';
+                boxImg.style.opacity = (allOk && clearedIds.includes(big?.id)) ? "1" : "0.5";
+            }
+            const rPath = getImgPath(boxData.deco_right);
+            if (rPath) {
+                rightDeco.src = rPath;
+                rightDeco.style.display = 'block';
+            }
+        }
+    }
+
+    function showQuiz(p) {
+        currentPz = p;
+        document.getElementById('q-title').innerText = p.type;
+        document.getElementById('q-place').innerText = p.place ? `📍 場所：${p.place}` : "";
+        
+        const qVis = document.getElementById('q-visual-container');
+        const inputArea = document.getElementById('input-area');
+        const clearNote = document.getElementById('clear-note');
+        const hBtnArea = document.getElementById('hint-buttons');
+        const hDisplay = document.getElementById('hint-display');
+        
+        document.getElementById('result-msg').innerText = "";
+        document.getElementById('answer-input').value = "";
+        hDisplay.style.display = "none";
+
+        const qPath = getImgPath(p.q_img);
+        qVis.innerHTML = qPath ? `<img src="${qPath}" class="q-visual-img">` : "";
+        qVis.style.display = qPath ? "block" : "none";
+        
+        if(clearedIds.includes(p.id)) {
+            inputArea.style.display = "none";
+            qVis.style.display = "none";
+            clearNote.style.display = "block";
+            const cPath = getImgPath(p.clear_img);
+            let imgHtml = cPath ? `<img src="${cPath}" class="explanation-img">` : "";
+            clearNote.innerHTML = `<div style="font-weight:bold; color:#059669; margin-bottom:8px;">🌟 正解！</div><p>${p.note}</p>${imgHtml}<button class="btn-main" style="margin-top:15px; background:#64748b;" onclick="changeScreen('screen-main')">戻る</button>`;
+            hBtnArea.parentElement.style.display = "none";
+        } else {
+            inputArea.style.display = "block";
+            clearNote.style.display = "none";
+            hBtnArea.parentElement.style.display = "block";
+            hBtnArea.innerHTML = "";
+            p.hints.forEach((h, i) => {
+                if(!h || !h.trim()) return;
+                const b = document.createElement('button');
+                b.className = "btn-main";
+                b.style = "height:40px; font-size:13px; background:#f3f4f6; color:#333; border:1px solid #ccc;";
+                b.innerText = `ヒント${i+1}`;
+                b.onclick = () => { hDisplay.innerText = h; hDisplay.style.display="block"; };
+                hBtnArea.appendChild(b);
+            });
+        }
+        changeScreen('screen-quiz');
+    }
+
+    function checkAnswer() {
+        const input = document.getElementById('answer-input').value.trim();
+        if(!input) return;
+        const userInput = input.toLowerCase().replace(/[！-～]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
+        const isCorrect = currentPz.ans.some(a => a.trim().toLowerCase().replace(/[！-～]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)) === userInput);
+
+        if(isCorrect) {
+            if(!clearedIds.includes(currentPz.id)) {
+                clearedIds.push(currentPz.id);
+                localStorage.setItem('ivy_cleared', JSON.stringify(clearedIds));
+            }
+            showQuiz(currentPz);
+        } else {
+            document.getElementById('result-msg').innerText = "❌ 違うみたい...";
+            document.getElementById('result-msg').style.color = "#dc2626";
+        }
+    }
+
+    function tryOpenBox() {
+        if(boxData && clearedIds.includes(bigPuzzleId)) {
+            document.getElementById('final-note-display').innerText = boxData.note;
+            const fImg = document.getElementById('final-img');
+            const fPath = getImgPath(boxData.clear_img);
+            if (fPath) { fImg.src = fPath; fImg.style.display = 'block'; }
+            changeScreen('screen-ditto');
+        }
+    }
+
+    function changeScreen(id) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        if(id === 'screen-main') renderMenu();
+    }
+
+    load();
+</script>
+</body>
+</html>
