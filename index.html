@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
-    <title>謎解きラリー メタモンを探せ！</title>
+    <title>謎解きラリー メタモンを探せ！(テスト用)</title>
     <style>
         :root { --main: #6e8efb; --secondary: #a777e3; --bg: #f4f7f9; --white: #ffffff; }
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -108,12 +108,16 @@
 </div>
 
 <script>
+    // テストプレイモード：毎回読み込み時に進行状況をリセットする
+    localStorage.removeItem('ivy_cleared');
+    localStorage.removeItem('ivy_unlocked_pass');
+
     const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTBdawjEJXW0M8rkAMR0urV97CO7Vt4tLHCrKeNAOgrLwWefPEZ5n_jeAb4CtOS-xGuwu62wG_akPaj/pub?output=csv";
     const imageFolder = ""; 
 
     let puzzles = [];
-    let clearedIds = JSON.parse(localStorage.getItem('ivy_cleared') || '[]');
-    let unlockedPassIds = JSON.parse(localStorage.getItem('ivy_unlocked_pass') || '[]'); // パスワード解除済みのIDを管理
+    let clearedIds = [];
+    let unlockedPassIds = [];
     let currentPz = null;
     let boxData = null;
     let bigPuzzleId = null;
@@ -124,7 +128,6 @@
         return imageFolder + fileName.trim();
     }
 
-    // 全角英数を半角に変換＆トリムする補助関数
     function normalizeStr(str) {
         if (!str) return "";
         return str.trim().toLowerCase().replace(/[！-～]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
@@ -143,7 +146,6 @@
                 const c = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(s => s.replace(/"/g, '').trim());
                 if (c.length < 5) continue;
                 
-                // poster_pass または pass の列名に対応
                 const passColIdx = getCol('poster_pass') !== -1 ? getCol('poster_pass') : getCol('pass');
 
                 allRows.push({
@@ -186,7 +188,6 @@
             const btn = document.createElement('button');
             btn.className = `course-btn ${isCleared ? 'cleared' : (isUnlocked ? 'unlocked-btn' : '')}`;
             
-            // ロック/解除状態がひと目でわかるアイコン表示
             let statusIcon = isCleared ? "" : (isUnlocked ? " 🔓" : " 🔒");
             btn.innerHTML = `<span class="btn-label">${p.type}${statusIcon}</span>` + 
                             (p.place ? `<span class="btn-place">場所：${p.place}</span>` : "");
@@ -236,7 +237,6 @@
         document.getElementById('poster-pass-input').value = "";
         document.getElementById('pass-result-msg').innerText = "";
 
-        // パスワードが設定されていない、すでにパスワード解除済み、またはクリア済みの場合は直接問題を表示
         const isUnlocked = !p.poster_pass || unlockedPassIds.includes(p.id) || clearedIds.includes(p.id);
 
         if (isUnlocked) {
@@ -251,7 +251,6 @@
         changeScreen('screen-quiz');
     }
 
-    // ポスターのパスワードチェック処理
     function checkPosterPass() {
         const input = normalizeStr(document.getElementById('poster-pass-input').value);
         const correctPass = normalizeStr(currentPz.poster_pass);
@@ -259,7 +258,6 @@
         if (input === correctPass) {
             if (!unlockedPassIds.includes(currentPz.id)) {
                 unlockedPassIds.push(currentPz.id);
-                localStorage.setItem('ivy_unlocked_pass', JSON.stringify(unlockedPassIds));
             }
             document.getElementById('pass-auth-area').style.display = "none";
             document.getElementById('q-content').style.display = "block";
@@ -271,7 +269,6 @@
         }
     }
 
-    // クイズコンテンツのレンダリング
     function renderPuzzleContent(p) {
         const qVis = document.getElementById('q-visual-container');
         const inputArea = document.getElementById('input-area');
@@ -320,7 +317,6 @@
         if(isCorrect) {
             if(!clearedIds.includes(currentPz.id)) {
                 clearedIds.push(currentPz.id);
-                localStorage.setItem('ivy_cleared', JSON.stringify(clearedIds));
             }
             renderPuzzleContent(currentPz);
         } else {
