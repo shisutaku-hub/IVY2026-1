@@ -29,6 +29,8 @@
         .cleared .btn-label { color: #065f46; }
         .cleared::after { content: "✔"; position: absolute; right: 15px; top: 50%; transform: translateY(-50%); font-size: 20px; color: #10b981; }
 
+        .unlocked-btn { border-left: 5px solid #6e8efb; }
+
         /* クイズ画面 */
         #screen-quiz { padding: 15px; background: white; text-align: left; overflow-y: auto; }
         .q-visual-img, .explanation-img { width: 100%; max-height: 280px; object-fit: contain; margin-bottom: 15px; border-radius: 8px; display: block; }
@@ -53,7 +55,7 @@
         <img id="deco-right-img" src="">
         <div style="padding: 15px 15px 5px; text-align: center;">
             <h2 style="margin: 0; font-size: 20px;">問題選択</h2>
-            <p style="font-size: 13px; color: #64748b; margin: 5px 0;">ポスターを見つけて謎に挑戦しよう！<br>
+            <p style="font-size: 13px; color: #64748b; margin: 5px 0;">ポスターを見つけてパスワードを入手しよう！<br>
             ヒントはポケモンサークル出店ブース内、クイズゾーンにもあるぞ！</p>
         </div>
         <div id="list-container">
@@ -69,7 +71,18 @@
             <h3 id="q-title" style="margin: 0;"></h3>
             <span id="q-place" class="q-place-badge"></span>
         </div>
-        <div id="q-content">
+
+        <!-- 1. ポスターパスワード認証エリア -->
+        <div id="pass-auth-area" style="display:none; background:#f1f5f9; padding:20px; border-radius:12px; text-align:center;">
+            <p style="font-size:15px; font-weight:bold; color:#334155; margin-top:0;">📌 現地ポスターのパスワードを入力</p>
+            <p style="font-size:12px; color:#64748b; margin-bottom:15px;">ポスターに書かれたキーワードを入力すると謎画像が表示されます。</p>
+            <input type="text" id="poster-pass-input" placeholder="ポスターのパスワード">
+            <button class="btn-main" onclick="checkPosterPass()">確認する</button>
+            <div id="pass-result-msg" style="margin-top:10px; font-weight:bold; font-size:14px;"></div>
+        </div>
+
+        <!-- 2. 謎解除後のメインコンテンツエリア -->
+        <div id="q-content" style="display:none;">
             <div id="q-visual-container"></div>
             <div id="input-area">
                 <input type="text" id="answer-input" placeholder="答えを入力">
@@ -100,6 +113,7 @@
 
     let puzzles = [];
     let clearedIds = JSON.parse(localStorage.getItem('ivy_cleared') || '[]');
+    let unlockedPassIds = JSON.parse(localStorage.getItem('ivy_unlocked_pass') || '[]'); // パスワード解除済みのIDを管理
     let currentPz = null;
     let boxData = null;
     let bigPuzzleId = null;
@@ -108,6 +122,12 @@
         if (!fileName || fileName.trim().length < 2) return "";
         if (fileName.startsWith('http')) return fileName;
         return imageFolder + fileName.trim();
+    }
+
+    // 全角英数を半角に変換＆トリムする補助関数
+    function normalizeStr(str) {
+        if (!str) return "";
+        return str.trim().toLowerCase().replace(/[！-～]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
     }
 
     async function load() {
@@ -123,10 +143,14 @@
                 const c = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(s => s.replace(/"/g, '').trim());
                 if (c.length < 5) continue;
                 
+                // poster_pass または pass の列名に対応
+                const passColIdx = getCol('poster_pass') !== -1 ? getCol('poster_pass') : getCol('pass');
+
                 allRows.push({
                     id: c[getCol('id')] || "",
                     type: c[getCol('type')] || "",
-                    place: c[getCol('place')] || "", // 場所を取得
+                    place: c[getCol('place')] || "",
+                    poster_pass: passColIdx !== -1 ? c[passColIdx] || "" : "",
                     hints: (c[getCol('hints')] || "").split('/'),
                     ans: (c[getCol('ans')] || "").split('/'),
                     note: c[getCol('note')] || "",
@@ -157,9 +181,14 @@
         const big = puzzles[puzzles.length - 1];
 
         smalls.forEach(p => {
+            const isCleared = clearedIds.includes(p.id);
+            const isUnlocked = unlockedPassIds.includes(p.id);
             const btn = document.createElement('button');
-            btn.className = `course-btn ${clearedIds.includes(p.id) ? 'cleared' : ''}`;
-            btn.innerHTML = `<span class="btn-label">${p.type}</span>` + 
+            btn.className = `course-btn ${isCleared ? 'cleared' : (isUnlocked ? 'unlocked-btn' : '')}`;
+            
+            // ロック/解除状態がひと目でわかるアイコン表示
+            let statusIcon = isCleared ? "" : (isUnlocked ? " 🔓" : " 🔒");
+            btn.innerHTML = `<span class="btn-label">${p.type}${statusIcon}</span>` + 
                             (p.place ? `<span class="btn-place">場所：${p.place}</span>` : "");
             btn.onclick = () => showQuiz(p);
             list.appendChild(btn);
@@ -167,10 +196,14 @@
 
         const allOk = smalls.length > 0 && smalls.every(p => clearedIds.includes(p.id));
         if (allOk && big) {
+            const isCleared = clearedIds.includes(big.id);
+            const isUnlocked = unlockedPassIds.includes(big.id);
             const bBtn = document.createElement('button');
-            bBtn.className = `course-btn ${clearedIds.includes(big.id) ? 'cleared' : ''}`;
+            bBtn.className = `course-btn ${isCleared ? 'cleared' : (isUnlocked ? 'unlocked-btn' : '')}`;
             bBtn.style.border = "2px solid #a777e3";
-            bBtn.innerHTML = `<span class="btn-label">✨ ${big.type}</span>` + 
+            
+            let statusIcon = isCleared ? "" : (isUnlocked ? " 🔓" : " 🔒");
+            bBtn.innerHTML = `<span class="btn-label">✨ ${big.type}${statusIcon}</span>` + 
                              (big.place ? `<span class="btn-place">場所：${big.place}</span>` : "");
             bBtn.onclick = () => showQuiz(big);
             bigArea.appendChild(bBtn);
@@ -196,7 +229,50 @@
         currentPz = p;
         document.getElementById('q-title').innerText = p.type;
         document.getElementById('q-place').innerText = p.place ? `📍 場所：${p.place}` : "";
+
+        const passArea = document.getElementById('pass-auth-area');
+        const qContent = document.getElementById('q-content');
         
+        document.getElementById('poster-pass-input').value = "";
+        document.getElementById('pass-result-msg').innerText = "";
+
+        // パスワードが設定されていない、すでにパスワード解除済み、またはクリア済みの場合は直接問題を表示
+        const isUnlocked = !p.poster_pass || unlockedPassIds.includes(p.id) || clearedIds.includes(p.id);
+
+        if (isUnlocked) {
+            passArea.style.display = "none";
+            qContent.style.display = "block";
+            renderPuzzleContent(p);
+        } else {
+            passArea.style.display = "block";
+            qContent.style.display = "none";
+        }
+
+        changeScreen('screen-quiz');
+    }
+
+    // ポスターのパスワードチェック処理
+    function checkPosterPass() {
+        const input = normalizeStr(document.getElementById('poster-pass-input').value);
+        const correctPass = normalizeStr(currentPz.poster_pass);
+
+        if (input === correctPass) {
+            if (!unlockedPassIds.includes(currentPz.id)) {
+                unlockedPassIds.push(currentPz.id);
+                localStorage.setItem('ivy_unlocked_pass', JSON.stringify(unlockedPassIds));
+            }
+            document.getElementById('pass-auth-area').style.display = "none";
+            document.getElementById('q-content').style.display = "block";
+            renderPuzzleContent(currentPz);
+        } else {
+            const msg = document.getElementById('pass-result-msg');
+            msg.innerText = "❌ パスワードが違います";
+            msg.style.color = "#dc2626";
+        }
+    }
+
+    // クイズコンテンツのレンダリング
+    function renderPuzzleContent(p) {
         const qVis = document.getElementById('q-visual-container');
         const inputArea = document.getElementById('input-area');
         const clearNote = document.getElementById('clear-note');
@@ -234,21 +310,19 @@
                 hBtnArea.appendChild(b);
             });
         }
-        changeScreen('screen-quiz');
     }
 
     function checkAnswer() {
-        const input = document.getElementById('answer-input').value.trim();
-        if(!input) return;
-        const userInput = input.toLowerCase().replace(/[！-～]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
-        const isCorrect = currentPz.ans.some(a => a.trim().toLowerCase().replace(/[！-～]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)) === userInput);
+        const userInput = normalizeStr(document.getElementById('answer-input').value);
+        if(!userInput) return;
+        const isCorrect = currentPz.ans.some(a => normalizeStr(a) === userInput);
 
         if(isCorrect) {
             if(!clearedIds.includes(currentPz.id)) {
                 clearedIds.push(currentPz.id);
                 localStorage.setItem('ivy_cleared', JSON.stringify(clearedIds));
             }
-            showQuiz(currentPz);
+            renderPuzzleContent(currentPz);
         } else {
             document.getElementById('result-msg').innerText = "❌ 違うみたい...";
             document.getElementById('result-msg').style.color = "#dc2626";
